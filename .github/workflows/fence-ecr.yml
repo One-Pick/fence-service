@@ -2,6 +2,8 @@ name: Build and Push Fence to ECR
 
 on:
   push:
+    branches:
+      - prepare-to-deploy
 
 jobs:
   build-and-push:

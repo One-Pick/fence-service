@@ -1,9 +1,17 @@
 name: Build and Push Fence to ECR
 
+# Releases are numbered git tags (vMAJOR.MINOR.PATCH, for example v1.4.0).
+# A release tag pushes the image as :<tag> and moves :latest.
+# A manual run builds the chosen ref as :<commit sha> only and leaves :latest alone.
 on:
   push:
-    branches:
-      - prepare-to-deploy
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+concurrency:
+  group: ecr-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
@@ -27,11 +35,17 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: onepick/fence-service
-          IMAGE_TAG: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          # Build image
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          set -euo pipefail
+          IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY
+          if [ "$REF_TYPE" = "tag" ]; then
+            docker build -t "$IMAGE:$REF_NAME" -t "$IMAGE:latest" .
+            docker push "$IMAGE:$REF_NAME"
+            docker push "$IMAGE:latest"
+          else
+            docker build -t "$IMAGE:$COMMIT_SHA" .
+            docker push "$IMAGE:$COMMIT_SHA"
+          fi
